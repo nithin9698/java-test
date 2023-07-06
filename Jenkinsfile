@@ -1,40 +1,132 @@
 pipeline {
     agent any
 
-    environment {
-        function_name = 'myfunctionjava'
+    
+
+    parameters {
+        string(name: 'RollBackVersion', description: "Please enter rollback version")
+        choice(
+            choices: ['Dev', 'Test', 'Prod'],
+            name: 'Environment',
+            description: 'Please Select the environment to deploy to'
+        )
     }
 
     stages {
+        // CI Started
+
         stage('Build') {
             steps {
-                echo 'Builds'
+                echo 'Build'
                 sh 'mvn package'
             }
         }
-        
-        stage("sonarQube analysis") {
-            steps {
-                withSonarQubeEnv('Sonar') {
-                    echo 'scanning'
-                    sh 'mvn sonar:sonar'
-                }
-            }
-        }
-        // stage('Push') {
-        //     steps {
-        //         echo 'Push'
 
-        //         sh "aws s3 cp target/sample-1.0.3.jar s3://javabucketvineet"
+        // stage('Sonar Analysis') {
+        //     when {
+        //         anyOf {
+        //             branch "feature/*"
+        //             branch "main"
+        //         }
+        //     }
+
+        //     steps {
+        //         echo 'Sonar Analysis'
+        //         withSonarQubeEnv('Sonar') {
+        //             sh 'mvn sonar:sonar'
+        //         }
         //     }
         // }
 
-        // stage('Deploy') {
+        // stage('Sonar Quality Gate') {
         //     steps {
-        //         echo 'Build'
+        //         script {
+        //             try {
+        //                 timeout(time: 10, unit: 'MINUTES') {
+        //                     waitForQualityGate abortPipeline: true
+        //                 }
+        //             }
+        //             catch (Exception ex) {
 
-        //         sh "aws lambda update-function-code --function-name $function_name --region us-east-2 --s3-bucket javabucketvineet --s3-key sample-1.0.3.jar"
+        //             }
+        //         }
         //     }
-       // }
+        // }
+
+        stage('Push') {
+            steps {
+                echo 'Push'
+
+                // sh "aws s3 cp target/sample-1.0.3.jar s3://bermtecbatch31"
+            }
+        }
+
+        // CI Ended
+
+        // CD Started
+
+        stage('Deployments') {
+            parallel {
+                stage('Deploy to Dev') {
+                    steps {
+                        echo 'Build'
+
+                        // sh "aws lambda update-function-code --function-name $function_name --region us-east-1 --s3-bucket bermtecbatch31 --s3-key sample-1.0.3.jar"
+                    }
+                }
+
+                stage('Deploy to Test') {
+                    when {
+                        branch "main"
+                    }
+                    steps {
+                        echo 'Build'
+
+                        // sh "aws lambda update-function-code --function-name $function_name --region us-east-1 --s3-bucket bermtecbatch31 --s3-key sample-1.0.3.jar"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Prod') {
+            when {
+                expression { return params.Environment == 'Prod'}
+            }
+            steps {
+                echo 'Deploying to Prod'
+                input (
+                    message: "Are we good for Prod Deployment?"
+                )
+            }
+        }
+
+        stage ('Release to Prod') {
+            when {
+                branch "main"
+            }
+            steps {
+                echo "Release to Prod"
+                // sh "aws lambda update-function-code --function-name $function_name --region us-east-1 --s3-bucket bermtecbatch31 --s3-key sample-1.0.3.jar"
+            }
+        }
+
+        // CD Ended
+
     }
+
+    post {
+            always {
+                echo "${env.BUILD_ID}"
+                echo "${BRANCH_NAME}"
+                echo "${BUILD_NUMBER}"
+                echo "${JENKINS_URL}"
+            }
+            failure {
+                echo "Failed to execute"
+                mail(to:"9100406066n@gmail.com", body:"This build failed. Please try again", subject:"Build Failure")
+            }
+            aborted {
+                echo "Aborted"
+            }
+        }
 }
